@@ -5,8 +5,6 @@
 // Owns the Anthropic API call so the API key never enters the page context,
 // and so the request runs under the extension's host_permissions.
 
-const API_URL = "https://api.anthropic.com/v1/messages";
-
 const SYSTEM_PROMPT = [
   "You analyze YouTube videos. You receive a video's thumbnail image, title, channel name, and transcript.",
   "Write EVERY output field — question, answer, details, followup questions and answers, comparison and ranking content, recipe content, disclosure note — in the user's language, given as 'User language' in the message. Translate from the video's language when they differ. Keep product names and brand names untranslated.",
@@ -253,29 +251,46 @@ const OUTPUT_FORMAT = {
   },
 };
 
-// $ per million tokens. Sonnet 5 has intro pricing ($2/$10) through
-// 2026-08-31 — we show the standard rate, so real spend can be a bit lower
-// until then.
+// $ per million tokens. Anthropic: Sonnet 5 has intro pricing ($2/$10)
+// through 2026-08-31 — we show the standard rate. Gemini rates are the
+// Google AI paid tier and drift more often — treat as approximate.
 const PRICING = {
   "claude-opus-5": { input: 5, output: 25 },
   "claude-sonnet-5": { input: 3, output: 15 },
   "claude-haiku-4-5": { input: 1, output: 5 },
+  // Gemini paid-tier rates, verified against ai.google.dev/gemini-api/docs/pricing
+  // 2026-07-29 (free-tier requests are billed $0). "-latest" aliases are
+  // priced via the response's modelVersion, not listed here.
+  "gemini-3.6-flash": { input: 1.5, output: 7.5 },
+  "gemini-3.5-flash": { input: 1.5, output: 9 },
+  "gemini-3.5-flash-lite": { input: 0.3, output: 2.5 },
+  "gemini-3.1-pro-preview": { input: 2, output: 12 },
+  "gemini-3.1-flash-lite": { input: 0.25, output: 1.5 },
+  "gemini-3-pro-preview": { input: 2, output: 12 },
+  "gemini-3-flash-preview": { input: 0.5, output: 3 },
+  "gemini-2.5-pro": { input: 1.25, output: 10 },
+  "gemini-2.5-flash": { input: 0.3, output: 2.5 },
+  "gemini-2.5-flash-lite": { input: 0.1, output: 0.4 },
 };
 
-// We don't use prompt caching, so the cache fields are normally zero; they're
-// included so the token count stays honest if caching is ever added.
+// Exact match, then without a trailing revision (-001), then prefix match —
+// resolved Gemini model versions carry suffixes the table doesn't.
+function priceFor(model) {
+  if (PRICING[model]) return PRICING[model];
+  const base = model.replace(/-\d{3}$/, "");
+  if (PRICING[base]) return PRICING[base];
+  const key = Object.keys(PRICING).find((k) => model.startsWith(k));
+  return key ? PRICING[key] : null;
+}
+
+// usage arrives provider-normalized: { inputTokens, outputTokens }.
 function buildUsage(model, usage) {
   if (!usage) return null;
-  const inputTokens =
-    (usage.input_tokens || 0) +
-    (usage.cache_creation_input_tokens || 0) +
-    (usage.cache_read_input_tokens || 0);
-  const outputTokens = usage.output_tokens || 0;
-  const price = PRICING[model];
+  const price = priceFor(model);
   const cost = price
-    ? (inputTokens * price.input + outputTokens * price.output) / 1e6
+    ? (usage.inputTokens * price.input + usage.outputTokens * price.output) / 1e6
     : null;
-  return { model, inputTokens, outputTokens, cost };
+  return { model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, cost };
 }
 
 // --- Result cache (IndexedDB — extensions have no SQL; this is the
@@ -380,81 +395,193 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 });
 
+// --- Providers. One common contract: generate({apiKey, model, userText,
+// thumbnailUrl}) → { text, usage: {inputTokens, outputTokens} } or { error }.
+// Everything else (cache, parsing, sanitizing, pricing) is provider-agnostic.
+
+const PROVIDERS = {
+  anthropic: {
+    async generate({ apiKey, model, userText, thumbnailUrl }) {
+      const body = {
+        model,
+        max_tokens: 4096,
+        system: SYSTEM_PROMPT,
+        output_config: { format: OUTPUT_FORMAT },
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "image", source: { type: "url", url: thumbnailUrl } },
+              { type: "text", text: userText },
+            ],
+          },
+        ],
+      };
+      // Summarization is a simple task — low effort keeps answers snappy.
+      // Haiku 4.5 doesn't accept the effort parameter.
+      if (!model.startsWith("claude-haiku")) {
+        body.output_config.effort = "low";
+      }
+
+      let res;
+      try {
+        res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+            "anthropic-dangerous-direct-browser-access": "true",
+          },
+          body: JSON.stringify(body),
+        });
+      } catch (err) {
+        return { error: `Network error calling the Anthropic API: ${err.message}` };
+      }
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        const detail = data?.error?.message || `HTTP ${res.status}`;
+        if (res.status === 401) return { error: `Invalid API key (${detail}).` };
+        if (res.status === 429) return { error: "Rate limited — try again shortly." };
+        return { error: detail };
+      }
+      if (data.stop_reason === "refusal") {
+        return { error: "The model declined to answer for this video." };
+      }
+      const u = data.usage || {};
+      return {
+        text: (data.content || [])
+          .filter((b) => b.type === "text")
+          .map((b) => b.text)
+          .join("\n"),
+        usage: {
+          inputTokens:
+            (u.input_tokens || 0) +
+            (u.cache_creation_input_tokens || 0) +
+            (u.cache_read_input_tokens || 0),
+          outputTokens: u.output_tokens || 0,
+        },
+      };
+    },
+  },
+
+  gemini: {
+    async generate({ apiKey, model, userText, thumbnailUrl }) {
+      // Gemini can't fetch image URLs server-side — inline the thumbnail.
+      const parts = [];
+      const imgB64 = await fetchImageBase64(thumbnailUrl);
+      if (imgB64) parts.push({ inline_data: { mime_type: "image/jpeg", data: imgB64 } });
+      parts.push({ text: userText });
+
+      let res;
+      try {
+        res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: SYSTEM_PROMPT + GEMINI_JSON_SUFFIX }] },
+              contents: [{ role: "user", parts }],
+              generationConfig: {
+                maxOutputTokens: 8192,
+                responseMimeType: "application/json",
+              },
+            }),
+          }
+        );
+      } catch (err) {
+        return { error: `Network error calling the Gemini API: ${err.message}` };
+      }
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        const detail = data?.error?.message || `HTTP ${res.status}`;
+        if (res.status === 400 && /api key/i.test(detail)) return { error: `Invalid API key (${detail})` };
+        if (res.status === 429) {
+          // Google uses 429 for both rate limiting AND "your tier has no
+          // quota for this model" — surface the real message.
+          let msg = `Gemini quota/rate limit: ${detail}`;
+          if (/quota|billing|free tier/i.test(detail)) {
+            msg += " (Tip: new accounts often need billing enabled in Google AI Studio, or a model your tier includes.)";
+          }
+          return { error: msg };
+        }
+        return { error: detail };
+      }
+      const cand = data?.candidates?.[0];
+      if (!cand || cand.finishReason === "SAFETY" || cand.finishReason === "PROHIBITED_CONTENT") {
+        return { error: "The model declined to answer for this video." };
+      }
+      const u = data.usageMetadata || {};
+      return {
+        text: (cand.content?.parts || []).map((p) => p.text || "").join(""),
+        // What actually served the request — "-latest" aliases resolve to a
+        // concrete model here, which is what pricing should key off.
+        resolvedModel: data.modelVersion || null,
+        usage: {
+          inputTokens: u.promptTokenCount || 0,
+          outputTokens: (u.candidatesTokenCount || 0) + (u.thoughtsTokenCount || 0),
+        },
+      };
+    },
+  },
+};
+
+// Gemini has no schema enforcement here, so spell the JSON contract out.
+const GEMINI_JSON_SUFFIX =
+  " Respond with ONLY a single JSON object — no markdown fences, no commentary — with exactly these keys: " +
+  "title (string), question (string|null), answer (string), details (string[]), " +
+  "followups ({question,answer}[]), comparison (object as described above, or null), " +
+  "ranking (object as described above, or null), recipe (object as described above, or null), " +
+  "disclosure ({type, note} or null).";
+
+async function fetchImageBase64(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(bin);
+  } catch {
+    return null;
+  }
+}
+
 async function handleSummarize({ videoId, title, author, thumbnailUrl, transcript, description, language }) {
-  const { apiKey, model } = await chrome.storage.local.get({
-    apiKey: "",
+  const settings = await chrome.storage.local.get({
+    provider: "anthropic",
+    apiKey: "", // Anthropic key/model keep their legacy field names so existing installs migrate silently
     model: "claude-haiku-4-5",
+    geminiApiKey: "",
+    geminiModel: "gemini-flash-latest",
   });
+  const providerName = PROVIDERS[settings.provider] ? settings.provider : "anthropic";
+  const apiKey = providerName === "gemini" ? settings.geminiApiKey : settings.apiKey;
+  const model = providerName === "gemini" ? settings.geminiModel : settings.model;
   if (!apiKey) return { ok: false, error: "no-key" };
 
   const cacheKey = `${videoId}|${model}|${language || "en"}`;
   const hit = await cacheGet(cacheKey);
   if (hit) return { ...hit, cached: true };
 
-  const body = {
-    model,
-    max_tokens: 4096,
-    system: SYSTEM_PROMPT,
-    output_config: { format: OUTPUT_FORMAT },
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "image", source: { type: "url", url: thumbnailUrl } },
-          {
-            type: "text",
-            text:
-              `User language: ${language || "en"}\n` +
-              `Title: ${title}\nChannel: ${author}\n\n` +
-              `Description (start):\n${description || "(none)"}\n\n` +
-              `Transcript:\n${transcript}`,
-          },
-        ],
-      },
-    ],
-  };
-  // Summarization is a simple task — low effort keeps answers snappy.
-  // Haiku 4.5 doesn't accept the effort parameter.
-  if (!model.startsWith("claude-haiku")) {
-    body.output_config.effort = "low";
-  }
+  const userText =
+    `User language: ${language || "en"}\n` +
+    `Title: ${title}\nChannel: ${author}\n\n` +
+    `Description (start):\n${description || "(none)"}\n\n` +
+    `Transcript:\n${transcript}`;
 
-  let res;
-  try {
-    res = await fetch(API_URL, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true",
-      },
-      body: JSON.stringify(body),
-    });
-  } catch (err) {
-    return { ok: false, error: `Network error calling the Anthropic API: ${err.message}` };
-  }
+  const gen = await PROVIDERS[providerName].generate({ apiKey, model, userText, thumbnailUrl });
+  if (gen.error) return { ok: false, error: gen.error };
 
-  const data = await res.json().catch(() => null);
-  if (!res.ok) {
-    const detail = data?.error?.message || `HTTP ${res.status}`;
-    if (res.status === 401) return { ok: false, error: `Invalid API key (${detail}).` };
-    if (res.status === 429) return { ok: false, error: `Rate limited — try again shortly.` };
-    return { ok: false, error: detail };
-  }
-
-  if (data.stop_reason === "refusal") {
-    return { ok: false, error: "The model declined to answer for this video." };
-  }
-
-  const text = (data.content || [])
-    .filter((b) => b.type === "text")
-    .map((b) => b.text)
-    .join("\n")
-    .trim();
+  let text = (gen.text || "").trim();
+  // Belt-and-braces for providers without schema enforcement: strip fences.
+  text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
   if (!text) return { ok: false, error: "The model returned an empty response." };
 
-  const usage = buildUsage(model, data.usage);
+  const usage = buildUsage(gen.resolvedModel || model, gen.usage);
 
   // Structured outputs guarantees valid JSON matching OUTPUT_FORMAT, but
   // degrade to plain text just in case (e.g. truncation at max_tokens).

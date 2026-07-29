@@ -4,7 +4,11 @@
   "version": "0.1.0",
   "description": "Hover a YouTube thumbnail and get an AI answer to the question the title/thumbnail teases.",
   "permissions": ["storage"],
-  "host_permissions": ["https://api.anthropic.com/*"],
+  "host_permissions": [
+    "https://api.anthropic.com/*",
+    "https://generativelanguage.googleapis.com/*",
+    "https://i.ytimg.com/*"
+  ],
   "content_scripts": [
     {
       "matches": ["https://www.youtube.com/*"],

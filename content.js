@@ -126,7 +126,7 @@ async function summarize(videoId, badge) {
         setCard(card, {
           state: "error",
           title: meta.title,
-          text: "No Anthropic API key configured yet.",
+          text: "No API key configured yet.",
           showOptionsLink: true,
         });
         return;
@@ -136,7 +136,15 @@ async function summarize(videoId, badge) {
     // Once the result is back, show the title in the user's language too.
     setCard(card, { state: "done", title: res.titleTranslated || meta.title, result: res });
   } catch (err) {
-    setCard(card, { state: "error", text: err?.message || String(err) });
+    const msg = err?.message || String(err);
+    setCard(card, {
+      state: "error",
+      // Thrown by the orphaned content script after the extension is
+      // reloaded/updated while this tab stayed open.
+      text: /Extension context invalidated/i.test(msg)
+        ? "The extension was updated — refresh this YouTube tab and try again."
+        : msg,
+    });
   }
 }
 
@@ -443,7 +451,7 @@ function setCard(card, { state, title, text, result, showOptionsLink }) {
   if (showOptionsLink) {
     const link = document.createElement("button");
     link.className = "yts-options-link";
-    link.textContent = "Open settings to add your Anthropic API key";
+    link.textContent = "Open settings to add your API key";
     link.addEventListener("click", () =>
       chrome.runtime.sendMessage({ type: "open-options" })
     );

@@ -15,7 +15,31 @@
     }
     h1 {
       font-size: 15px;
-      margin: 0 0 14px;
+      margin: 0 0 12px;
+    }
+    .tabs {
+      display: flex;
+      gap: 2px;
+      border-bottom: 1px solid #444;
+      margin-bottom: 14px;
+    }
+    .tab {
+      border: none;
+      background: none;
+      color: #aaa;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+    .tab:hover {
+      color: #fff;
+    }
+    .tab-active {
+      color: #3ea6ff;
+      border-bottom-color: #3ea6ff;
     }
     label {
       display: block;
@@ -69,26 +93,55 @@
       color: #999;
       line-height: 1.4;
     }
+    section .hint {
+      margin-top: 0;
+    }
   </style>
 </head>
 <body>
   <h1>YT Hover Summary</h1>
 
-  <label>
-    Anthropic API key
-    <input type="password" id="apiKey" placeholder="sk-ant-…" autocomplete="off" />
-  </label>
+  <div class="tabs">
+    <button class="tab" data-provider="anthropic">Anthropic</button>
+    <button class="tab" data-provider="gemini">Gemini</button>
+  </div>
 
-  <label>
-    Model
-    <select id="model">
-      <option value="claude-haiku-4-5">Claude Haiku 4.5 — fastest, cheapest (default)</option>
-      <option value="claude-sonnet-5">Claude Sonnet 5 — better, a bit pricier</option>
-      <option value="claude-opus-5">Claude Opus 5 — best quality, priciest</option>
-    </select>
-  </label>
+  <section data-panel="anthropic">
+    <label>
+      Anthropic API key
+      <input type="password" id="apiKey" placeholder="sk-ant-…" autocomplete="off" />
+    </label>
+    <label>
+      Model
+      <select id="model">
+        <option value="claude-haiku-4-5">Claude Haiku 4.5 — fastest, cheapest (default)</option>
+        <option value="claude-sonnet-5">Claude Sonnet 5 — better, a bit pricier</option>
+        <option value="claude-opus-5">Claude Opus 5 — best quality, priciest</option>
+      </select>
+    </label>
+    <p class="hint">Get a key at console.anthropic.com → Settings → API keys.</p>
+  </section>
 
-  <button id="save">Save</button><span id="status"></span>
+  <section data-panel="gemini" hidden>
+    <label>
+      Gemini API key
+      <input type="password" id="geminiApiKey" placeholder="AIza…" autocomplete="off" />
+    </label>
+    <label>
+      Model
+      <select id="geminiModel">
+        <option value="gemini-flash-latest">Gemini Flash (latest) — free-tier friendly (default)</option>
+        <option value="gemini-pro-latest">Gemini Pro (latest) — best</option>
+        <option value="gemini-flash-lite-latest">Gemini Flash-Lite (latest) — cheapest</option>
+        <option value="gemini-3-pro-preview">Gemini 3 Pro (preview, pinned)</option>
+        <option value="gemini-2.5-pro">Gemini 2.5 Pro (pinned)</option>
+        <option value="gemini-2.5-flash">Gemini 2.5 Flash (pinned)</option>
+      </select>
+    </label>
+    <p class="hint">Get a key at aistudio.google.com → Get API key.</p>
+  </section>
+
+  <button id="save">Save &amp; use this provider</button><span id="status"></span>
 
   <div class="row">
     <button id="clearCache" class="secondary">Clear summary cache</button>
@@ -96,9 +149,9 @@
   </div>
 
   <p class="hint">
-    The key is stored in chrome.storage.local on this machine only and is sent
-    only to api.anthropic.com. Get one at console.anthropic.com. Summaries are
-    cached on-device so repeat clicks are free.
+    Keys are stored in chrome.storage.local on this machine only and are sent
+    only to the selected provider's API. Summaries are cached on-device so
+    repeat clicks are free.
   </p>
 
   <script src="options.js"></script>
