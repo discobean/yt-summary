@@ -29,18 +29,31 @@ video with:
   clicking the same video again is instant and free (marked ⚡ cached).
   Clear it with the button in the settings popup.
 
-No account, no server — it talks directly to the Anthropic API with your own
-key. A typical video costs ~0.5–10¢ depending on model and video length.
+No account, no server — it talks directly to the **Anthropic (Claude)** or
+**Google Gemini** API with your own key; you pick the provider in the
+extension's settings. A typical video costs ~0.5–10¢ depending on model and
+video length (free on Gemini's free tier).
 
 ## Setup
 
-### 1. Get an Anthropic API key
+### 1. Get an API key (Anthropic or Gemini — either works)
+
+**Anthropic (Claude):**
 
 1. Sign up / sign in at [console.anthropic.com](https://console.anthropic.com).
 2. Add billing under **Settings → Billing** (trial credits or a small top-up —
    $5 lasts a long time).
 3. Go to **Settings → API keys** → **Create Key**, name it (e.g.
    `yt-summary`), and copy the `sk-ant-…` key. It's shown only once.
+
+**Google Gemini:**
+
+1. Sign in at [aistudio.google.com](https://aistudio.google.com) and click
+   **Get API key** → **Create API key**.
+2. The free tier works (pick a "latest" model in the extension — new accounts
+   often have no quota on the pinned model IDs). Free-tier caveats: low
+   per-day request caps, and Google may use free-tier content to improve its
+   products. Enable billing for higher limits and no training use.
 
 ### 2. Get the code
 
@@ -69,17 +82,21 @@ extension.)
 ### 4. Add your key to the extension
 
 1. Click the extension's toolbar icon.
-2. Paste your `sk-ant-…` key.
-3. Pick a model and **Save**:
+2. Pick the **Anthropic** or **Gemini** tab and paste that provider's key.
+3. Pick a model and **Save** — the tab you save from becomes the active
+   provider (you can store keys for both and switch any time).
 
-| Model | Quality | Typical cost per video |
-| --- | --- | --- |
-| Claude Haiku 4.5 (default) | Good — great fit for this task | ~0.5–2¢ |
-| Claude Sonnet 5 | Better on long/nuanced videos | ~1.5–5¢ |
-| Claude Opus 5 | Best | ~3–10¢ |
+| Provider | Model | Quality | Typical cost per video |
+| --- | --- | --- | --- |
+| Anthropic | Claude Haiku 4.5 (default) | Good — great fit for this task | ~0.5–2¢ |
+| Anthropic | Claude Sonnet 5 | Better on long/nuanced videos | ~1.5–5¢ |
+| Anthropic | Claude Opus 5 | Best | ~3–10¢ |
+| Gemini | Gemini Flash (latest) (default) | Good | free tier / ~0.5–5¢ |
+| Gemini | Gemini Pro (latest) | Better | ~2–10¢ |
 
-The key is stored in `chrome.storage.local` on this machine only and is sent
-only to `api.anthropic.com`.
+Keys are stored in `chrome.storage.local` on this machine only and are sent
+only to the selected provider's API (`api.anthropic.com` or
+`generativelanguage.googleapis.com`).
 
 ### 5. Use it
 
@@ -101,15 +118,18 @@ playback starts). The card docks under the video; close it with ✕ or Escape.
 | File | Role |
 | --- | --- |
 | `content.js` | Runs on youtube.com. Injects the hover badge (proactive sweep via MutationObserver + hover fast-path), fetches oEmbed metadata + transcript + description, renders the docked card with its tabs. |
-| `background.js` | Service worker. Owns the Anthropic API call (`POST /v1/messages`) so the key never enters the page context; defines the JSON output schema; computes per-request cost from a pricing table. |
+| `background.js` | Service worker. Owns the provider API calls (Anthropic / Gemini) behind one common `generate()` interface so keys never enter the page context; defines the JSON output schema; computes per-request cost from a pricing table. |
 | `options.html/js` | Toolbar popup + options page: API key and model selection. |
 | `content.css` | Badge, card, tabs, tables, and timeline styling. |
 
 Flow: badge click → oEmbed for title/channel → transcript + description → the
-service worker sends the thumbnail (image-URL content block), title, channel,
-description, transcript, and browser language to Claude with a JSON schema
-(structured outputs), getting back `{title, question, answer, details,
-followups[], comparison|ranking|recipe, disclosure}` plus exact token usage.
+service worker sends the thumbnail, title, channel, description, transcript,
+and browser language to the active provider, getting back `{title, question,
+answer, details, followups[], comparison|ranking|recipe, disclosure}` plus
+exact token usage. On Anthropic the JSON shape is enforced server-side
+(structured outputs, thumbnail passed as an image URL); on Gemini it's JSON
+mode plus an explicit contract in the prompt, with the thumbnail inlined as
+base64 (Gemini doesn't fetch URLs) and defensive parsing on our side.
 
 Design decisions:
 
