@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "YT Hover Summary",
+  "version": "0.1.0",
+  "description": "Hover a YouTube thumbnail and get an AI answer to the question the title/thumbnail teases.",
+  "permissions": ["storage"],
+  "host_permissions": ["https://api.anthropic.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": { "service_worker": "background.js" },
+  "action": {
+    "default_popup": "options.html",
+    "default_title": "YT Hover Summary settings"
+  },
+  "options_ui": { "page": "options.html", "open_in_tab": false }
+}

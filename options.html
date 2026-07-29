@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>YT Hover Summary — Settings</title>
+  <style>
+    body {
+      font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      font-size: 14px;
+      margin: 0;
+      padding: 16px;
+      width: 340px;
+      background: #1c1c1c;
+      color: #eee;
+    }
+    h1 {
+      font-size: 15px;
+      margin: 0 0 14px;
+    }
+    label {
+      display: block;
+      margin-bottom: 12px;
+      font-weight: 500;
+    }
+    input,
+    select {
+      display: block;
+      width: 100%;
+      margin-top: 4px;
+      padding: 7px 8px;
+      border: 1px solid #444;
+      border-radius: 6px;
+      background: #2a2a2a;
+      color: #eee;
+      font-size: 13px;
+      box-sizing: border-box;
+    }
+    button {
+      padding: 7px 16px;
+      border: none;
+      border-radius: 6px;
+      background: #3ea6ff;
+      color: #111;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #status {
+      margin-left: 8px;
+      color: #7bd88f;
+    }
+    .hint {
+      margin-top: 14px;
+      font-size: 12px;
+      color: #999;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <h1>YT Hover Summary</h1>
+
+  <label>
+    Anthropic API key
+    <input type="password" id="apiKey" placeholder="sk-ant-…" autocomplete="off" />
+  </label>
+
+  <label>
+    Model
+    <select id="model">
+      <option value="claude-haiku-4-5">Claude Haiku 4.5 — fastest, cheapest (default)</option>
+      <option value="claude-sonnet-5">Claude Sonnet 5 — better, a bit pricier</option>
+      <option value="claude-opus-5">Claude Opus 5 — best quality, priciest</option>
+    </select>
+  </label>
+
+  <button id="save">Save</button><span id="status"></span>
+
+  <p class="hint">
+    The key is stored in chrome.storage.local on this machine only and is sent
+    only to api.anthropic.com. Get one at console.anthropic.com.
+  </p>
+
+  <script src="options.js"></script>
+</body>
+</html>
