@@ -424,7 +424,7 @@ function setCard(card, { state, title, text, result, showOptionsLink }) {
       body.append(summary);
     }
     if (result.usage) {
-      body.append(buildUsageLine(result.usage));
+      body.append(buildUsageLine(result.usage, result.cached));
     }
   } else {
     const p = document.createElement("p");
@@ -696,12 +696,13 @@ function formatMin(min) {
   return `${min}m`;
 }
 
-function buildUsageLine({ model, inputTokens, outputTokens, cost }) {
+function buildUsageLine({ model, inputTokens, outputTokens, cost }, cached) {
   const div = document.createElement("div");
   div.className = "yts-usage";
   const fmt = (n) => n.toLocaleString("en");
   let text = `${model.replace(/^claude-/, "")} · ${fmt(inputTokens)} tokens in / ${fmt(outputTokens)} out`;
   if (cost != null) text += ` · ~$${cost.toFixed(3)}`;
+  if (cached) text = `⚡ cached (free) · ${text}`;
   div.textContent = text;
   return div;
 }

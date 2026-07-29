@@ -20,3 +20,18 @@ document.getElementById("save").addEventListener("click", async () => {
   status.textContent = "Saved ✓";
   setTimeout(() => (status.textContent = ""), 1500);
 });
+
+const cacheStatus = document.getElementById("cacheStatus");
+
+function refreshCacheCount() {
+  chrome.runtime.sendMessage({ type: "cache-count" }).then((res) => {
+    cacheStatus.textContent = `${res?.count ?? 0} cached`;
+  });
+}
+refreshCacheCount();
+
+document.getElementById("clearCache").addEventListener("click", async () => {
+  const res = await chrome.runtime.sendMessage({ type: "clear-cache" });
+  cacheStatus.textContent = `Cleared ${res?.cleared ?? 0} ✓`;
+  setTimeout(refreshCacheCount, 1500);
+});

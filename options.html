@@ -48,6 +48,21 @@
       margin-left: 8px;
       color: #7bd88f;
     }
+    .row {
+      margin-top: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    button.secondary {
+      background: #3a3a3a;
+      color: #eee;
+      font-weight: 500;
+    }
+    #cacheStatus {
+      color: #999;
+      font-size: 12px;
+    }
     .hint {
       margin-top: 14px;
       font-size: 12px;
@@ -75,9 +90,15 @@
 
   <button id="save">Save</button><span id="status"></span>
 
+  <div class="row">
+    <button id="clearCache" class="secondary">Clear summary cache</button>
+    <span id="cacheStatus"></span>
+  </div>
+
   <p class="hint">
     The key is stored in chrome.storage.local on this machine only and is sent
-    only to api.anthropic.com. Get one at console.anthropic.com.
+    only to api.anthropic.com. Get one at console.anthropic.com. Summaries are
+    cached on-device so repeat clicks are free.
   </p>
 
   <script src="options.js"></script>

@@ -24,7 +24,10 @@ video with:
   reads (VPNs etc.) are ignored;
 - everything in **your browser's language and units** (grams vs ounces, °C vs
   °F, km vs miles, L/100km vs mpg);
-- a footer with exact token usage and the **estimated cost of that click**.
+- a footer with exact token usage and the **estimated cost of that click**;
+- an **on-device cache** (IndexedDB, keyed by video + model + language) —
+  clicking the same video again is instant and free (marked ⚡ cached).
+  Clear it with the button in the settings popup.
 
 No account, no server — it talks directly to the Anthropic API with your own
 key. A typical video costs ~0.5–10¢ depending on model and video length.

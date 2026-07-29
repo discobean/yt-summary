@@ -278,22 +278,118 @@ function buildUsage(model, usage) {
   return { model, inputTokens, outputTokens, cost };
 }
 
+// --- Result cache (IndexedDB — extensions have no SQL; this is the
+// browser's database). Keyed by videoId|model|language so changing either
+// setting regenerates instead of serving the wrong variant. ---
+
+const DB_NAME = "yts-cache";
+const STORE = "summaries";
+const CACHE_MAX_ENTRIES = 500;
+
+function openDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const store = req.result.createObjectStore(STORE, { keyPath: "key" });
+      store.createIndex("at", "at");
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function idbRequest(req) {
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function cacheGet(key) {
+  try {
+    const db = await openDb();
+    const row = await idbRequest(db.transaction(STORE).objectStore(STORE).get(key));
+    return row?.result || null;
+  } catch {
+    return null;
+  }
+}
+
+async function cachePut(key, result) {
+  try {
+    const db = await openDb();
+    await idbRequest(
+      db.transaction(STORE, "readwrite").objectStore(STORE).put({ key, at: Date.now(), result })
+    );
+    // Prune oldest entries beyond the cap.
+    const count = await idbRequest(db.transaction(STORE).objectStore(STORE).count());
+    if (count > CACHE_MAX_ENTRIES) {
+      const store = db.transaction(STORE, "readwrite").objectStore(STORE);
+      await new Promise((resolve) => {
+        let toRemove = count - CACHE_MAX_ENTRIES;
+        const cur = store.index("at").openCursor();
+        cur.onsuccess = () => {
+          const c = cur.result;
+          if (!c || toRemove-- <= 0) return resolve();
+          c.delete();
+          c.continue();
+        };
+        cur.onerror = () => resolve();
+      });
+    }
+  } catch {
+    // cache failures must never break summarizing
+  }
+}
+
+async function cacheCount() {
+  try {
+    const db = await openDb();
+    return await idbRequest(db.transaction(STORE).objectStore(STORE).count());
+  } catch {
+    return 0;
+  }
+}
+
+async function cacheClear() {
+  try {
+    const db = await openDb();
+    const count = await idbRequest(db.transaction(STORE).objectStore(STORE).count());
+    await idbRequest(db.transaction(STORE, "readwrite").objectStore(STORE).clear());
+    return count;
+  } catch {
+    return 0;
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === "summarize") {
     handleSummarize(msg).then(sendResponse);
     return true; // keep the message channel open for the async response
+  }
+  if (msg.type === "cache-count") {
+    cacheCount().then((count) => sendResponse({ count }));
+    return true;
+  }
+  if (msg.type === "clear-cache") {
+    cacheClear().then((cleared) => sendResponse({ cleared }));
+    return true;
   }
   if (msg.type === "open-options") {
     chrome.runtime.openOptionsPage();
   }
 });
 
-async function handleSummarize({ title, author, thumbnailUrl, transcript, description, language }) {
+async function handleSummarize({ videoId, title, author, thumbnailUrl, transcript, description, language }) {
   const { apiKey, model } = await chrome.storage.local.get({
     apiKey: "",
     model: "claude-haiku-4-5",
   });
   if (!apiKey) return { ok: false, error: "no-key" };
+
+  const cacheKey = `${videoId}|${model}|${language || "en"}`;
+  const hit = await cacheGet(cacheKey);
+  if (hit) return { ...hit, cached: true };
 
   const body = {
     model,
@@ -366,9 +462,10 @@ async function handleSummarize({ title, author, thumbnailUrl, transcript, descri
   try {
     parsed = JSON.parse(text);
   } catch {}
+  let result;
   if (!parsed?.answer) {
     const [first, ...rest] = text.split("\n").filter((l) => l.trim());
-    return {
+    result = {
       ok: true,
       question: null,
       answer: first || text,
@@ -381,31 +478,34 @@ async function handleSummarize({ title, author, thumbnailUrl, transcript, descri
       titleTranslated: null,
       usage,
     };
+  } else {
+    const followups = (Array.isArray(parsed.followups) ? parsed.followups : [])
+      .filter((f) => f?.question && f?.answer)
+      .slice(0, 5);
+    let comparison = sanitizeComparison(parsed.comparison);
+    let ranking = sanitizeRanking(parsed.ranking);
+    // Mutually exclusive; if the model filled both anyway, a bigger
+    // best-to-worst list beats a head-to-head, and vice versa.
+    if (comparison && ranking) {
+      if (ranking.items.length >= 4) comparison = null;
+      else ranking = null;
+    }
+    result = {
+      ok: true,
+      question: parsed.question || null,
+      answer: parsed.answer,
+      details: Array.isArray(parsed.details) ? parsed.details : [],
+      followups,
+      comparison,
+      ranking,
+      recipe: sanitizeRecipe(parsed.recipe),
+      disclosure: sanitizeDisclosure(parsed.disclosure),
+      titleTranslated: parsed.title ? String(parsed.title) : null,
+      usage,
+    };
   }
-  const followups = (Array.isArray(parsed.followups) ? parsed.followups : [])
-    .filter((f) => f?.question && f?.answer)
-    .slice(0, 5);
-  let comparison = sanitizeComparison(parsed.comparison);
-  let ranking = sanitizeRanking(parsed.ranking);
-  // Mutually exclusive; if the model filled both anyway, a bigger
-  // best-to-worst list beats a head-to-head, and vice versa.
-  if (comparison && ranking) {
-    if (ranking.items.length >= 4) comparison = null;
-    else ranking = null;
-  }
-  return {
-    ok: true,
-    question: parsed.question || null,
-    answer: parsed.answer,
-    details: Array.isArray(parsed.details) ? parsed.details : [],
-    followups,
-    comparison,
-    ranking,
-    recipe: sanitizeRecipe(parsed.recipe),
-    disclosure: sanitizeDisclosure(parsed.disclosure),
-    titleTranslated: parsed.title ? String(parsed.title) : null,
-    usage,
-  };
+  await cachePut(cacheKey, result);
+  return result;
 }
 
 function sanitizeRecipe(r) {
