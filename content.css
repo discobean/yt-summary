@@ -52,6 +52,26 @@ ytd-video-preview .yts-badge,
   background: rgba(0, 0, 0, 0.95);
 }
 
+/* Masthead ✨ button (watch pages only) */
+.yts-masthead-btn {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #f1f1f1;
+  font-size: 18px;
+  line-height: 40px;
+  padding: 0;
+  cursor: pointer;
+  filter: grayscale(1) brightness(1.5);
+  margin-right: 4px;
+}
+
+.yts-masthead-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
 /* Result card — docked under the video (left/top/width set inline from the
    video's rect); absolute positioning makes it scroll with the page. */
 #yts-card {
@@ -70,6 +90,18 @@ ytd-video-preview .yts-badge,
   font-family: "Roboto", Arial, sans-serif;
   font-size: 13px;
   line-height: 1.45;
+}
+
+/* Watch-page mode: same card, pinned to the right edge of the window. */
+#yts-card.yts-panel {
+  position: fixed;
+  top: 64px; /* below the masthead */
+  right: 12px;
+  left: auto;
+  width: 400px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 76px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
 }
 
 .yts-card-header {

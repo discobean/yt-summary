@@ -27,7 +27,10 @@ video with:
 - a footer with exact token usage and the **estimated cost of that click**;
 - an **on-device cache** (IndexedDB, keyed by video + model + language) —
   clicking the same video again is instant and free (marked ⚡ cached).
-  Clear it with the button in the settings popup.
+  Clear it with the button in the settings popup;
+- on **watch pages** (when you're actually watching a video), a ✨ button in
+  YouTube's top bar opens the same card as a panel pinned to the right edge
+  of the window.
 
 No account, no server — it talks directly to the **Anthropic (Claude)** or
 **Google Gemini** API with your own key; you pick the provider in the

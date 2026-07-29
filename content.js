@@ -48,11 +48,34 @@ new MutationObserver(() => {
 sweepBadges();
 
 function sweepBadges() {
+  ensureMastheadButton();
   const preview = document.querySelector("ytd-video-preview, #video-preview");
   if (preview) ensureBadge(preview);
   for (const thumb of document.querySelectorAll("ytd-thumbnail, yt-thumbnail-view-model")) {
     ensureBadge(thumb);
   }
+}
+
+// Watch pages have no thumbnail to badge, so they get a ✨ button in the
+// masthead (next to Create/notifications). It opens the same card as a
+// fixed panel on the right. The sweep keeps its visibility in sync with
+// YouTube's SPA navigation.
+function ensureMastheadButton() {
+  const end = document.querySelector("ytd-masthead #end");
+  if (!end) return;
+  let btn = end.querySelector(".yts-masthead-btn");
+  if (!btn) {
+    btn = document.createElement("button");
+    btn.className = "yts-masthead-btn";
+    btn.textContent = "✨";
+    btn.title = "Summarize this video";
+    btn.addEventListener("click", () => {
+      const videoId = new URLSearchParams(location.search).get("v");
+      if (videoId) summarize(videoId, btn, true);
+    });
+    end.prepend(btn);
+  }
+  btn.style.display = location.pathname === "/watch" ? "" : "none";
 }
 
 function ensureBadge(host) {
@@ -100,8 +123,8 @@ function findVideoId(host) {
   return id && /^[\w-]{11}$/.test(id) ? id : null;
 }
 
-async function summarize(videoId, badge) {
-  const card = showCard(cardAnchorRect(badge));
+async function summarize(videoId, badge, panel = false) {
+  const card = showCard(panel ? null : cardAnchorRect(badge));
   setCard(card, { state: "loading", text: "Fetching video info…" });
   try {
     const meta = await fetchOembed(videoId);
@@ -354,10 +377,16 @@ function showCard(rect) {
   document.getElementById(CARD_ID)?.remove();
   const card = document.createElement("div");
   card.id = CARD_ID;
-  // Absolute document coordinates so the card scrolls with the page.
-  card.style.left = `${rect.left + window.scrollX}px`;
-  card.style.top = `${rect.bottom + window.scrollY + 8}px`;
-  card.style.width = `${rect.width}px`;
+  if (rect) {
+    // Docked under a video tile: absolute document coordinates so the card
+    // scrolls with the page.
+    card.style.left = `${rect.left + window.scrollX}px`;
+    card.style.top = `${rect.bottom + window.scrollY + 8}px`;
+    card.style.width = `${rect.width}px`;
+  } else {
+    // Watch page: fixed panel pinned to the right edge of the window.
+    card.classList.add("yts-panel");
+  }
   document.body.appendChild(card);
   return card;
 }
