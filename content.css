@@ -59,7 +59,9 @@ ytd-video-preview .yts-badge,
   z-index: 100000;
   min-width: 320px;
   max-height: 60vh;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: #212121;
   color: #f1f1f1;
   border: 1px solid #3f3f3f;
@@ -71,6 +73,7 @@ ytd-video-preview .yts-badge,
 }
 
 .yts-card-header {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -142,6 +145,18 @@ ytd-video-preview .yts-badge,
 
 .yts-card-body {
   padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* The scrollable region: everything under the tab bar (or the whole body
+   when there are no tabs). Header, tabs, and usage footer never scroll. */
+.yts-card-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .yts-card-body p {

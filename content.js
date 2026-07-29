@@ -377,10 +377,14 @@ function setCard(card, { state, title, text, result, showOptionsLink }) {
 
   const body = document.createElement("div");
   body.className = `yts-card-body yts-${state}`;
+  // Only this element scrolls — the header, tab bar, and usage footer stay put.
+  const scroll = document.createElement("div");
+  scroll.className = "yts-card-scroll";
   if (state === "loading") {
     const spinner = document.createElement("span");
     spinner.className = "yts-spinner";
-    body.append(spinner, document.createTextNode(` ${text}`));
+    scroll.append(spinner, document.createTextNode(` ${text}`));
+    body.append(scroll);
   } else if (state === "done") {
     // Summary panel: the question the thumbnail/title poses (when there is
     // one), the very short answer, detail lines, follow-up chips.
@@ -419,17 +423,20 @@ function setCard(card, { state, title, text, result, showOptionsLink }) {
     }
     if (tabPanels.length > 1) {
       const panels = tabPanels.map(([, p]) => p);
-      body.append(buildTabs(tabPanels.map(([l]) => l), panels), ...panels);
+      body.append(buildTabs(tabPanels.map(([l]) => l), panels));
+      scroll.append(...panels);
     } else {
-      body.append(summary);
+      scroll.append(summary);
     }
+    body.append(scroll);
     if (result.usage) {
       body.append(buildUsageLine(result.usage, result.cached));
     }
   } else {
     const p = document.createElement("p");
     p.textContent = text;
-    body.append(p);
+    scroll.append(p);
+    body.append(scroll);
   }
   card.append(header, body);
 
@@ -507,6 +514,7 @@ function buildTabs(labels, panels) {
       bar.querySelectorAll(".yts-tab").forEach((t) => t.classList.remove("yts-tab-active"));
       tab.classList.add("yts-tab-active");
       panels.forEach((p, j) => (p.hidden = j !== i));
+      panels[i].closest(".yts-card-scroll")?.scrollTo(0, 0);
     });
     bar.append(tab);
   });
