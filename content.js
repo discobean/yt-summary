@@ -445,9 +445,12 @@ function setCard(card, { state, title, text, result, showOptionsLink }) {
       summary.append(buildFollowups(result.followups));
     }
 
-    // Extra tabs by video type: Review for versus/ranking videos,
+    // Extra tabs: Learn for every video, Review for versus/ranking videos,
     // Ingredients + Steps for recipes (mutually exclusive with Review).
     const tabPanels = [["Summary", summary]];
+    if (result.learnings?.length) {
+      tabPanels.push(["Learn", buildLearnings(result.learnings)]);
+    }
     const review = result.comparison
       ? buildComparison(result.comparison)
       : result.ranking
@@ -651,6 +654,27 @@ function buildRanking({ items, note }) {
   });
   table.append(tbody);
   panel.append(table);
+  return panel;
+}
+
+// Learn tab: glanceable takeaways, most important first — #1 highlighted.
+function buildLearnings(learnings) {
+  const panel = document.createElement("div");
+  const list = document.createElement("ol");
+  list.className = "yts-learnings";
+  for (const item of learnings) {
+    const li = document.createElement("li");
+    li.className = "yts-learning";
+    const num = document.createElement("span");
+    num.className = "yts-learning-num";
+    num.textContent = String(list.children.length + 1);
+    const txt = document.createElement("span");
+    txt.className = "yts-learning-text";
+    txt.textContent = item;
+    li.append(num, txt);
+    list.append(li);
+  }
+  panel.append(list);
   return panel;
 }
 

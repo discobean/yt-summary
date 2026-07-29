@@ -363,6 +363,52 @@ ytd-video-preview .yts-badge,
   background: rgba(62, 166, 255, 0.16);
 }
 
+/* Learn tab: ranked takeaways */
+.yts-learnings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.yts-learning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid #2e2e2e;
+}
+
+.yts-learning:first-child {
+  border-top: none;
+}
+
+.yts-learning-num {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #2f2f2f;
+  color: #3ea6ff;
+  font-weight: 600;
+  font-size: 12px;
+  text-align: center;
+  line-height: 22px;
+}
+
+.yts-learning:first-child .yts-learning-num {
+  background: #3ea6ff;
+  color: #0f0f0f;
+}
+
+.yts-learning:first-child .yts-learning-text {
+  font-weight: 600;
+}
+
+.yts-learning-text {
+  flex: 1;
+  min-width: 0;
+}
+
 /* Recipe: ingredients table */
 .yts-table .yts-ing-amount {
   width: 32%;

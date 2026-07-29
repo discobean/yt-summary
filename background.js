@@ -7,7 +7,7 @@
 
 const SYSTEM_PROMPT = [
   "You analyze YouTube videos. You receive a video's thumbnail image, title, channel name, and transcript.",
-  "Write EVERY output field — question, answer, details, followup questions and answers, comparison and ranking content, recipe content, disclosure note — in the user's language, given as 'User language' in the message. Translate from the video's language when they differ. Keep product names and brand names untranslated.",
+  "Write EVERY output field — question, answer, details, followup questions and answers, learnings, comparison and ranking content, recipe content, disclosure note — in the user's language, given as 'User language' in the message. Translate from the video's language when they differ. Keep product names and brand names untranslated.",
   "Convert every measurement in every field to the units conventional for the user's locale (from 'User language'): en-US gets ounces/pounds/cups, °F, miles, mpg; most other locales get grams/ml, °C, km, L/100km; en-GB gets metric weights but miles. Round converted values to sensible amounts (e.g. 7 oz, not 7.05 oz).",
   "The text overlaid on the thumbnail image is the primary thing to focus on — read it carefully first.",
   'Thumbnail text usually poses a question ("The future?") or a teaser claim without revealing the answer — that is the question the viewer wants answered.',
@@ -17,6 +17,7 @@ const SYSTEM_PROMPT = [
   "answer: answer that question from the transcript in one very short line — a phrase or short sentence, well under 12 words. This is the payoff the viewer wants.",
   "details: 2-4 short plain-text lines expanding on the answer with the key specifics from the video. No markdown.",
   "followups: 3-5 interesting follow-up questions that the video also answers — things a curious viewer would want to drill into after the main answer. Each gets its own concise answer (1-3 sentences) drawn from the transcript. Don't repeat the main question, and only include questions the transcript genuinely answers.",
+  "learnings: the 4-7 key things a viewer actually learns from this video, ordered from MOST to least important. Each is one short, punchy, self-contained line — someone should get the gist of the video by skimming them in a few seconds. Don't repeat the answer verbatim.",
   "comparison: fill this ONLY when the video is a head-to-head comparison or versus-style review of 2-3 products (phone vs phone, tool A vs tool B vs tool C, etc). products = the 2-3 product names, short. rows = the 5-8 key aspects compared in the video (Battery, Camera, Price...), each with one very short verdict per product (a few words, same order as products) and winnerIndex = the index of the product that wins that aspect, or null for a tie. winner = the overall winning product name if the video declares or clearly implies one, else null. winnerNote = one short line on why it wins, or why there is no clear winner.",
   "ranking: fill this ONLY when the video ranks a larger set of products from best to worst (top-10 lists, 'every X ranked', tier lists, buyer's guides). items = every ranked product in order from BEST to WORST, each with its name, a very short verdict on why it ranks there, and award = the label the video gives it ('Best overall', 'Best budget') or null. note = one short line on the ranking criteria.",
   "recipe: fill ONLY when the video teaches how to make a dish or drink. name = the dish. serves and totalTime when stated or reasonably estimable, else null. ingredients = the COMPLETE shopping list, every ingredient with its amount. steps = the method in order: action = one short instruction; ingredients = the ingredients WITH amounts added during that step (empty array when none); startMin = estimated minutes from the start of cooking when the step begins — first step 0, then realistic cumulative times based on the video (include resting/marinating/oven time).",
@@ -67,6 +68,12 @@ const OUTPUT_FORMAT = {
           additionalProperties: false,
         },
         description: "3-5 follow-up questions the video also answers, for drilling down.",
+      },
+      learnings: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          "4-7 key learning outcomes, most important first. Short, punchy, one line each.",
       },
       comparison: {
         anyOf: [
@@ -246,7 +253,7 @@ const OUTPUT_FORMAT = {
           "Non-null only when the maker of the reviewed product paid for, gifted, or loaned it. Unrelated sponsor reads don't count.",
       },
     },
-    required: ["title", "question", "answer", "details", "followups", "comparison", "ranking", "recipe", "disclosure"],
+    required: ["title", "question", "answer", "details", "followups", "learnings", "comparison", "ranking", "recipe", "disclosure"],
     additionalProperties: false,
   },
 };
@@ -598,6 +605,7 @@ async function handleSummarize({ videoId, title, author, thumbnailUrl, transcrip
       answer: first || text,
       details: rest,
       followups: [],
+      learnings: [],
       comparison: null,
       ranking: null,
       recipe: null,
@@ -623,6 +631,10 @@ async function handleSummarize({ videoId, title, author, thumbnailUrl, transcrip
       answer: parsed.answer,
       details: Array.isArray(parsed.details) ? parsed.details : [],
       followups,
+      learnings: (Array.isArray(parsed.learnings) ? parsed.learnings : [])
+        .filter(Boolean)
+        .map(String)
+        .slice(0, 8),
       comparison,
       ranking,
       recipe: sanitizeRecipe(parsed.recipe),
