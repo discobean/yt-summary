@@ -409,20 +409,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 const PROVIDERS = {
   anthropic: {
     async generate({ apiKey, model, userText, thumbnailUrl }) {
+      const content = [];
+      if (thumbnailUrl) {
+        content.push({ type: "image", source: { type: "url", url: thumbnailUrl } });
+      }
+      content.push({ type: "text", text: userText });
       const body = {
         model,
         max_tokens: 4096,
         system: SYSTEM_PROMPT,
         output_config: { format: OUTPUT_FORMAT },
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "image", source: { type: "url", url: thumbnailUrl } },
-              { type: "text", text: userText },
-            ],
-          },
-        ],
+        messages: [{ role: "user", content }],
       };
       // Summarization is a simple task — low effort keeps answers snappy.
       // Haiku 4.5 doesn't accept the effort parameter.
@@ -476,7 +473,7 @@ const PROVIDERS = {
     async generate({ apiKey, model, userText, thumbnailUrl }) {
       // Gemini can't fetch image URLs server-side — inline the thumbnail.
       const parts = [];
-      const imgB64 = await fetchImageBase64(thumbnailUrl);
+      const imgB64 = thumbnailUrl ? await fetchImageBase64(thumbnailUrl) : null;
       if (imgB64) parts.push({ inline_data: { mime_type: "image/jpeg", data: imgB64 } });
       parts.push({ text: userText });
 
@@ -564,13 +561,17 @@ async function handleSummarize({ videoId, title, author, thumbnailUrl, transcrip
     model: "claude-haiku-4-5",
     geminiApiKey: "",
     geminiModel: "gemini-flash-latest",
+    sendThumbnail: true,
   });
   const providerName = PROVIDERS[settings.provider] ? settings.provider : "anthropic";
   const apiKey = providerName === "gemini" ? settings.geminiApiKey : settings.apiKey;
   const model = providerName === "gemini" ? settings.geminiModel : settings.model;
   if (!apiKey) return { ok: false, error: "no-key" };
 
-  const cacheKey = `${videoId}|${model}|${language || "en"}`;
+  // Thumbnail-less results differ, so they get their own cache entries; the
+  // default (thumbnail on) keeps the original key format so old entries live.
+  const cacheKey =
+    `${videoId}|${model}|${language || "en"}` + (settings.sendThumbnail ? "" : "|nothumb");
   const hit = await cacheGet(cacheKey);
   if (hit) return { ...hit, cached: true };
 
@@ -578,9 +579,17 @@ async function handleSummarize({ videoId, title, author, thumbnailUrl, transcrip
     `User language: ${language || "en"}\n` +
     `Title: ${title}\nChannel: ${author}\n\n` +
     `Description (start):\n${description || "(none)"}\n\n` +
-    `Transcript:\n${transcript}`;
+    `Transcript:\n${transcript}` +
+    (settings.sendThumbnail
+      ? ""
+      : "\n\n(No thumbnail image is provided — derive the question from the title.)");
 
-  const gen = await PROVIDERS[providerName].generate({ apiKey, model, userText, thumbnailUrl });
+  const gen = await PROVIDERS[providerName].generate({
+    apiKey,
+    model,
+    userText,
+    thumbnailUrl: settings.sendThumbnail ? thumbnailUrl : null,
+  });
   if (gen.error) return { ok: false, error: gen.error };
 
   let text = (gen.text || "").trim();

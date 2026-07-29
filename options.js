@@ -6,6 +6,7 @@ const fields = {
   model: document.getElementById("model"),
   geminiApiKey: document.getElementById("geminiApiKey"),
   geminiModel: document.getElementById("geminiModel"),
+  sendThumbnail: document.getElementById("sendThumbnail"),
 };
 const status = document.getElementById("status");
 const tabs = [...document.querySelectorAll(".tab")];
@@ -28,12 +29,14 @@ chrome.storage.local
     model: "claude-haiku-4-5",
     geminiApiKey: "",
     geminiModel: "gemini-flash-latest",
+    sendThumbnail: true,
   })
   .then((s) => {
     fields.apiKey.value = s.apiKey;
     fields.model.value = s.model;
     fields.geminiApiKey.value = s.geminiApiKey;
     fields.geminiModel.value = s.geminiModel;
+    fields.sendThumbnail.checked = s.sendThumbnail;
     showProvider(s.provider === "gemini" ? "gemini" : "anthropic");
   });
 
@@ -44,6 +47,7 @@ document.getElementById("save").addEventListener("click", async () => {
     model: fields.model.value,
     geminiApiKey: fields.geminiApiKey.value.trim(),
     geminiModel: fields.geminiModel.value,
+    sendThumbnail: fields.sendThumbnail.checked,
   });
   status.textContent = `Saved ✓ using ${activeProvider === "gemini" ? "Gemini" : "Anthropic"}`;
   setTimeout(() => (status.textContent = ""), 2000);

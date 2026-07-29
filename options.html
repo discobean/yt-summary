@@ -96,6 +96,18 @@
     section .hint {
       margin-top: 0;
     }
+    .check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 500;
+      margin: 2px 0 12px;
+    }
+    .check input {
+      display: inline-block;
+      width: auto;
+      margin: 0;
+    }
   </style>
 </head>
 <body>
@@ -140,6 +152,11 @@
     </label>
     <p class="hint">Get a key at aistudio.google.com → Get API key.</p>
   </section>
+
+  <label class="check">
+    <input type="checkbox" id="sendThumbnail" checked />
+    Send the video thumbnail image to the AI provider
+  </label>
 
   <button id="save">Save &amp; use this provider</button><span id="status"></span>
 

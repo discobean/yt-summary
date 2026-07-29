@@ -87,7 +87,10 @@ extension.)
 1. Click the extension's toolbar icon.
 2. Pick the **Anthropic** or **Gemini** tab and paste that provider's key.
 3. Pick a model and **Save** — the tab you save from becomes the active
-   provider (you can store keys for both and switch any time).
+   provider (you can store keys for both and switch any time). Untick
+   **Send the video thumbnail image** if you don't want the thumbnail
+   uploaded to the provider — the question is then derived from the title
+   (thumbnail overlay text can't be read, and vision-token cost is saved).
 
 | Provider | Model | Quality | Typical cost per video |
 | --- | --- | --- | --- |
