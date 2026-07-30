@@ -124,7 +124,13 @@ function findVideoId(host) {
 }
 
 async function summarize(videoId, badge, panel = false) {
-  const card = showCard(panel ? null : cardAnchorRect(badge));
+  await runSummary(showCard(panel ? null : cardAnchorRect(badge)), videoId);
+}
+
+// Fills an already-placed card: metadata → transcript → model. Reloading
+// reuses the same card element so it keeps its position on the page, and
+// passes refresh so the worker regenerates instead of serving its cache.
+async function runSummary(card, videoId, refresh = false) {
   setCard(card, { state: "loading", text: "Fetching video info…" });
   try {
     const meta = await fetchOembed(videoId);
@@ -141,6 +147,7 @@ async function summarize(videoId, badge, panel = false) {
       transcript,
       description,
       language: navigator.language || "en",
+      refresh,
     });
 
     if (!res) throw new Error("No response from the background worker.");
@@ -157,7 +164,13 @@ async function summarize(videoId, badge, panel = false) {
       throw new Error(res.error);
     }
     // Once the result is back, show the title in the user's language too.
-    setCard(card, { state: "done", title: res.titleTranslated || meta.title, result: res });
+    setCard(card, {
+      state: "done",
+      title: res.titleTranslated || meta.title,
+      result: res,
+      // Lets the footer's ⚡ cached badge regenerate this answer.
+      onReload: () => runSummary(card, videoId, true),
+    });
   } catch (err) {
     const msg = err?.message || String(err);
     setCard(card, {
@@ -391,7 +404,7 @@ function showCard(rect) {
   return card;
 }
 
-function setCard(card, { state, title, text, result, showOptionsLink }) {
+function setCard(card, { state, title, text, result, showOptionsLink, onReload }) {
   card.textContent = "";
 
   const header = document.createElement("div");
@@ -445,12 +458,14 @@ function setCard(card, { state, title, text, result, showOptionsLink }) {
       summary.append(buildFollowups(result.followups));
     }
 
-    // Extra tabs: Learn for every video, Review for versus/ranking videos,
-    // Ingredients + Steps for recipes (mutually exclusive with Review).
+    // Extra tabs: Learn for every video, then one video-type tab — List for
+    // listicles, Review for versus/ranking videos, Ingredients + Steps for
+    // recipes. The backend guarantees at most one of those types is filled.
     const tabPanels = [["Summary", summary]];
     if (result.learnings?.length) {
       tabPanels.push(["Learn", buildLearnings(result.learnings)]);
     }
+    if (result.list) tabPanels.push(["List", buildList(result.list)]);
     const review = result.comparison
       ? buildComparison(result.comparison)
       : result.ranking
@@ -470,7 +485,7 @@ function setCard(card, { state, title, text, result, showOptionsLink }) {
     }
     body.append(scroll);
     if (result.usage) {
-      body.append(buildUsageLine(result.usage, result.cached));
+      body.append(buildUsageLine(result.usage, result.cached, onReload));
     }
   } else {
     const p = document.createElement("p");
@@ -678,6 +693,55 @@ function buildLearnings(learnings) {
   return panel;
 }
 
+// List tab: an unranked enumeration ("21 X we'd never buy") — every item in
+// the order the video presents it, with what the video says about each.
+function buildList({ heading, stated, items }) {
+  const panel = document.createElement("div");
+
+  const head = document.createElement("p");
+  head.className = "yts-winner";
+  head.textContent = heading || "The list";
+  panel.append(head);
+  // Videos routinely promise more than they deliver, so say how much of the
+  // claimed count actually made it into the video.
+  const count = document.createElement("p");
+  count.className = "yts-winner-note";
+  count.textContent =
+    stated && stated !== items.length
+      ? `${items.length} of ${stated} covered`
+      : `${items.length} items`;
+  panel.append(count);
+
+  const list = document.createElement("ol");
+  list.className = "yts-list";
+  items.forEach((item, i) => {
+    const li = document.createElement("li");
+    li.className = "yts-list-item";
+
+    const num = document.createElement("span");
+    num.className = "yts-list-num";
+    num.textContent = String(i + 1);
+
+    const itemBody = document.createElement("div");
+    itemBody.className = "yts-list-body";
+    const name = document.createElement("p");
+    name.className = "yts-list-name";
+    name.textContent = item.name;
+    itemBody.append(name);
+    for (const note of item.notes) {
+      const p = document.createElement("p");
+      p.className = "yts-list-note";
+      p.textContent = note;
+      itemBody.append(p);
+    }
+
+    li.append(num, itemBody);
+    list.append(li);
+  });
+  panel.append(list);
+  return panel;
+}
+
 // Ingredients tab: the full shopping list, amounts first.
 function buildIngredients({ name, serves, totalTime, ingredients }) {
   const panel = document.createElement("div");
@@ -765,14 +829,26 @@ function formatMin(min) {
   return `${min}m`;
 }
 
-function buildUsageLine({ model, inputTokens, outputTokens, cost }, cached) {
+function buildUsageLine({ model, inputTokens, outputTokens, cost }, cached, onReload) {
   const div = document.createElement("div");
   div.className = "yts-usage";
   const fmt = (n) => n.toLocaleString("en");
   let text = `${model.replace(/^claude-/, "")} · ${fmt(inputTokens)} tokens in / ${fmt(outputTokens)} out`;
   if (cost != null) text += ` · ~$${cost.toFixed(3)}`;
-  if (cached) text = `⚡ cached (free) · ${text}`;
-  div.textContent = text;
+  if (!cached) {
+    div.textContent = text;
+    return div;
+  }
+  // A cached answer is stale by nature (the video may have gained context, or
+  // the last run may have missed something), so the badge doubles as a reload
+  // that asks the model again — and that costs money, hence the tooltip.
+  const reload = document.createElement("button");
+  reload.className = "yts-reload";
+  reload.textContent = "⚡ cached (free) ↻";
+  reload.title = "Reload — ask the model again instead of using the cached answer";
+  if (onReload) reload.addEventListener("click", onReload);
+  else reload.disabled = true;
+  div.append(reload, document.createTextNode(` · ${text}`));
   return div;
 }
 

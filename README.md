@@ -12,6 +12,11 @@ video with:
 - the **question** the thumbnail/title poses and a **very short direct
   answer**, plus a few lines of detail;
 - **follow-up question chips** — click to reveal answers the video also gives;
+- a **Learn tab**: the 4-7 things the video actually teaches, most important
+  first;
+- a **List tab** for listicles and countdowns ("21 X we would never buy"):
+  every item in the order the video presents them, each with what the video
+  says about it — plus how many of the promised items it actually covers;
 - a **Review tab** for product videos: a head-to-head table for "X vs Y"
   reviews (2-3 products, per-aspect winners, 🏆 overall verdict) or a ranked
   best-to-worst table for top-N / tier-list videos;
@@ -27,7 +32,9 @@ video with:
 - a footer with exact token usage and the **estimated cost of that click**;
 - an **on-device cache** (IndexedDB, keyed by video + model + language) —
   clicking the same video again is instant and free (marked ⚡ cached).
-  Clear it with the button in the settings popup;
+  Click that ⚡ cached footer to regenerate just that video — it asks the model
+  again and replaces the stored answer. Clear the whole cache with the button
+  in the settings popup;
 - on **watch pages** (when you're actually watching a video), a ✨ button in
   YouTube's top bar opens the same card as a panel pinned to the right edge
   of the window.
@@ -131,11 +138,15 @@ playback starts). The card docks under the video; close it with ✕ or Escape.
 Flow: badge click → oEmbed for title/channel → transcript + description → the
 service worker sends the thumbnail, title, channel, description, transcript,
 and browser language to the active provider, getting back `{title, question,
-answer, details, followups[], comparison|ranking|recipe, disclosure}` plus
-exact token usage. On Anthropic the JSON shape is enforced server-side
-(structured outputs, thumbnail passed as an image URL); on Gemini it's JSON
-mode plus an explicit contract in the prompt, with the thumbnail inlined as
-base64 (Gemini doesn't fetch URLs) and defensive parsing on our side.
+answer, details, followups[], learnings[], extra, disclosure}` plus
+exact token usage. `extra` is one video-type payload tagged by `kind`
+(`comparison` | `ranking` | `list` | `recipe`), or null — the four are mutually
+exclusive, and keeping them in one tagged union rather than four sibling
+properties keeps Anthropic's compiled output grammar under its size limit. On
+Anthropic the JSON shape is enforced server-side (structured outputs, thumbnail
+passed as an image URL); on Gemini it's JSON mode plus an explicit contract in
+the prompt, with the thumbnail inlined as base64 (Gemini doesn't fetch URLs)
+and defensive parsing on our side.
 
 Design decisions:
 

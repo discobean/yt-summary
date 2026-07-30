@@ -7,7 +7,7 @@
 
 const SYSTEM_PROMPT = [
   "You analyze YouTube videos. You receive a video's thumbnail image, title, channel name, and transcript.",
-  "Write EVERY output field — question, answer, details, followup questions and answers, learnings, comparison and ranking content, recipe content, disclosure note — in the user's language, given as 'User language' in the message. Translate from the video's language when they differ. Keep product names and brand names untranslated.",
+  "Write EVERY output field — question, answer, details, followup questions and answers, learnings, everything inside extra, disclosure note — in the user's language, given as 'User language' in the message. Translate from the video's language when they differ. Keep product names and brand names untranslated.",
   "Convert every measurement in every field to the units conventional for the user's locale (from 'User language'): en-US gets ounces/pounds/cups, °F, miles, mpg; most other locales get grams/ml, °C, km, L/100km; en-GB gets metric weights but miles. Round converted values to sensible amounts (e.g. 7 oz, not 7.05 oz).",
   "The text overlaid on the thumbnail image is the primary thing to focus on — read it carefully first.",
   'Thumbnail text usually poses a question ("The future?") or a teaser claim without revealing the answer — that is the question the viewer wants answered.',
@@ -18,10 +18,12 @@ const SYSTEM_PROMPT = [
   "details: 2-4 short plain-text lines expanding on the answer with the key specifics from the video. No markdown.",
   "followups: 3-5 interesting follow-up questions that the video also answers — things a curious viewer would want to drill into after the main answer. Each gets its own concise answer (1-3 sentences) drawn from the transcript. Don't repeat the main question, and only include questions the transcript genuinely answers.",
   "learnings: the 4-7 key things a viewer actually learns from this video, ordered from MOST to least important. Each is one short, punchy, self-contained line — someone should get the gist of the video by skimming them in a few seconds. Don't repeat the answer verbatim.",
-  "comparison: fill this ONLY when the video is a head-to-head comparison or versus-style review of 2-3 products (phone vs phone, tool A vs tool B vs tool C, etc). products = the 2-3 product names, short. rows = the 5-8 key aspects compared in the video (Battery, Camera, Price...), each with one very short verdict per product (a few words, same order as products) and winnerIndex = the index of the product that wins that aspect, or null for a tie. winner = the overall winning product name if the video declares or clearly implies one, else null. winnerNote = one short line on why it wins, or why there is no clear winner.",
-  "ranking: fill this ONLY when the video ranks a larger set of products from best to worst (top-10 lists, 'every X ranked', tier lists, buyer's guides). items = every ranked product in order from BEST to WORST, each with its name, a very short verdict on why it ranks there, and award = the label the video gives it ('Best overall', 'Best budget') or null. note = one short line on the ranking criteria.",
-  "recipe: fill ONLY when the video teaches how to make a dish or drink. name = the dish. serves and totalTime when stated or reasonably estimable, else null. ingredients = the COMPLETE shopping list, every ingredient with its amount. steps = the method in order: action = one short instruction; ingredients = the ingredients WITH amounts added during that step (empty array when none); startMin = estimated minutes from the start of cooking when the step begins — first step 0, then realistic cumulative times based on the video (include resting/marinating/oven time).",
-  "comparison, ranking and recipe are mutually exclusive — fill at most ONE: a 2-3 product head-to-head is comparison, a bigger best-to-worst list is ranking, a cooking tutorial is recipe, anything else gets null for all three.",
+  "extra: ONE optional video-type-specific payload, or null. Set extra.kind to whichever ONE of comparison / ranking / list / recipe the video is, and fill that kind's fields alongside it. Use null when the video is none of them — most videos are none of them. The four are mutually exclusive: a 2-3 product head-to-head is comparison, a bigger best-to-worst list is ranking, an unranked enumeration of items is list, a cooking tutorial is recipe.",
+  "extra.kind 'comparison': ONLY when the video is a head-to-head comparison or versus-style review of 2-3 products (phone vs phone, tool A vs tool B vs tool C, etc). products = the 2-3 product names, short. rows = the 5-8 key aspects compared in the video (Battery, Camera, Price...), each with one very short verdict per product (a few words, same order as products) and winnerIndex = the index of the product that wins that aspect, or null for a tie. winner = the overall winning product name if the video declares or clearly implies one, else null. winnerNote = one short line on why it wins, or why there is no clear winner.",
+  "extra.kind 'ranking': ONLY when the video ranks a larger set of products from best to worst (top-10 lists, 'every X ranked', tier lists, buyer's guides). items = every ranked product in order from BEST to WORST, each with its name, a very short verdict on why it ranks there, and award = the label the video gives it ('Best overall', 'Best budget') or null. note = one short line on the ranking criteria. If the video's set carries no best-to-worst order, it is a list, not a ranking.",
+  "extra.kind 'list': ONLY when the video walks through an enumerated set of things that are NOT ranked best to worst — a listicle whose title states a count ('21 X we would never buy', '15 mistakes everyone makes'), a countdown, or any run through a set of picks, tips, facts, places or examples. heading = what the list is, a few words. stated = the count the video or its title claims, or null when none is given. items = every item the video actually covers, in the order presented: name = the item itself, short; notes = 1-3 short lines of what the video actually SAYS about that item — the specifics it gives, why it made the list, the presenter's take on it. Draw the notes from the transcript, never pad them with filler, and never just restate the name.",
+  "extra.kind 'recipe': ONLY when the video teaches how to make a dish or drink. name = the dish. serves and totalTime when stated or reasonably estimable, else null. ingredients = the COMPLETE shopping list, every ingredient with its amount. steps = the method in order: action = one short instruction; ingredients = the ingredients WITH amounts added during that step (empty array when none); startMin = estimated minutes from the start of cooking when the step begins — first step 0, then realistic cumulative times based on the video (include resting/marinating/oven time).",
+  "Fields belonging to a kind you did not pick must be omitted entirely — extra carries exactly the fields of its own kind.",
   "disclosure: watch for a brand relationship between the creator and the maker of the REVIEWED product specifically. It is most often SPOKEN in the video — listen carefully to the transcript, especially the opening minutes — and sometimes in the description. Set type: 'sponsored' when the reviewed product's own company paid for the video or placement (a paid review), 'free_product' when the reviewed product was given to the creator free, 'loaner' when the reviewed product must go back ('review unit', 'on loan'). IMPORTANT: a sponsor read from a company UNRELATED to the reviewed product (VPNs, website builders, meal kits, apps...) is NOT a disclosure — ignore it entirely; viewers only care whether the review itself is compromised. Pick the strongest that applies (sponsored > free_product > loaner) and set note = the creator's OWN words: quote or closely paraphrase the sentence where they disclose it, e.g. Said \"huge thanks to Anker for sending this over\". Never a generic predefined reason. Use null when the creator bought the product themselves, when the only sponsorship is unrelated to the reviewed product, or when there is no sign of a brand relationship. Do not treat ordinary affiliate links alone as a disclosure.",
   "If the transcript never actually answers the tease, make answer say so plainly.",
 ].join(" ");
@@ -75,12 +77,16 @@ const OUTPUT_FORMAT = {
         description:
           "4-7 key learning outcomes, most important first. Short, punchy, one line each.",
       },
-      comparison: {
+      // One tagged union instead of four sibling properties: the structured-
+      // outputs grammar grows steeply with the number of required top-level
+      // properties, and four nullable payloads pushed it past the limit.
+      extra: {
         anyOf: [
           { type: "null" },
           {
             type: "object",
             properties: {
+              kind: { type: "string", const: "comparison" },
               products: {
                 type: "array",
                 items: { type: "string" },
@@ -119,18 +125,13 @@ const OUTPUT_FORMAT = {
                 description: "One short line: why it wins, or why there's no clear winner.",
               },
             },
-            required: ["products", "rows", "winner", "winnerNote"],
+            required: ["kind", "products", "rows", "winner", "winnerNote"],
             additionalProperties: false,
           },
-        ],
-        description: "Only for 2-3 product head-to-head videos; null otherwise.",
-      },
-      ranking: {
-        anyOf: [
-          { type: "null" },
           {
             type: "object",
             properties: {
+              kind: { type: "string", const: "ranking" },
               items: {
                 type: "array",
                 items: {
@@ -156,19 +157,47 @@ const OUTPUT_FORMAT = {
                 description: "One short line on the ranking criteria.",
               },
             },
-            required: ["items", "note"],
+            required: ["kind", "items", "note"],
             additionalProperties: false,
           },
-        ],
-        description:
-          "Only for best-to-worst ranking videos; null otherwise. Mutually exclusive with comparison.",
-      },
-      recipe: {
-        anyOf: [
-          { type: "null" },
           {
             type: "object",
             properties: {
+              kind: { type: "string", const: "list" },
+              heading: {
+                type: "string",
+                description: "What the list is, a few words, e.g. 'Cars we'd never buy'.",
+              },
+              stated: {
+                anyOf: [{ type: "integer" }, { type: "null" }],
+                description: "The item count the video claims (the 21 in '21 things'), or null.",
+              },
+              items: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    name: { type: "string", description: "The item itself, short." },
+                    notes: {
+                      type: "array",
+                      items: { type: "string" },
+                      description:
+                        "1-3 short lines of what the video says about this item — specifics, why it's on the list, the presenter's take.",
+                    },
+                  },
+                  required: ["name", "notes"],
+                  additionalProperties: false,
+                },
+                description: "Every item the video covers, in the order presented.",
+              },
+            },
+            required: ["kind", "heading", "stated", "items"],
+            additionalProperties: false,
+          },
+          {
+            type: "object",
+            properties: {
+              kind: { type: "string", const: "recipe" },
               name: {
                 type: "string",
                 description: "The dish, in the user's language.",
@@ -221,11 +250,12 @@ const OUTPUT_FORMAT = {
                 description: "The method, in order.",
               },
             },
-            required: ["name", "serves", "totalTime", "ingredients", "steps"],
+            required: ["kind", "name", "serves", "totalTime", "ingredients", "steps"],
             additionalProperties: false,
           },
         ],
-        description: "Only when the video teaches making a dish/drink; null otherwise.",
+        description:
+          "At most ONE video-type payload, tagged by kind (comparison | ranking | list | recipe); null for videos that are none of them.",
       },
       disclosure: {
         anyOf: [
@@ -253,7 +283,7 @@ const OUTPUT_FORMAT = {
           "Non-null only when the maker of the reviewed product paid for, gifted, or loaned it. Unrelated sponsor reads don't count.",
       },
     },
-    required: ["title", "question", "answer", "details", "followups", "learnings", "comparison", "ranking", "recipe", "disclosure"],
+    required: ["title", "question", "answer", "details", "followups", "learnings", "extra", "disclosure"],
     additionalProperties: false,
   },
 };
@@ -535,9 +565,9 @@ const PROVIDERS = {
 const GEMINI_JSON_SUFFIX =
   " Respond with ONLY a single JSON object — no markdown fences, no commentary — with exactly these keys: " +
   "title (string), question (string|null), answer (string), details (string[]), " +
-  "followups ({question,answer}[]), comparison (object as described above, or null), " +
-  "ranking (object as described above, or null), recipe (object as described above, or null), " +
-  "disclosure ({type, note} or null).";
+  "followups ({question,answer}[]), learnings (string[]), " +
+  "extra (null, or an object whose kind is 'comparison' | 'ranking' | 'list' | 'recipe' " +
+  "carrying exactly that kind's fields as described above), disclosure ({type, note} or null).";
 
 async function fetchImageBase64(url) {
   try {
@@ -554,7 +584,7 @@ async function fetchImageBase64(url) {
   }
 }
 
-async function handleSummarize({ videoId, title, author, thumbnailUrl, transcript, description, language }) {
+async function handleSummarize({ videoId, title, author, thumbnailUrl, transcript, description, language, refresh }) {
   const settings = await chrome.storage.local.get({
     provider: "anthropic",
     apiKey: "", // Anthropic key/model keep their legacy field names so existing installs migrate silently
@@ -572,7 +602,9 @@ async function handleSummarize({ videoId, title, author, thumbnailUrl, transcrip
   // default (thumbnail on) keeps the original key format so old entries live.
   const cacheKey =
     `${videoId}|${model}|${language || "en"}` + (settings.sendThumbnail ? "" : "|nothumb");
-  const hit = await cacheGet(cacheKey);
+  // refresh = the user hit reload on a cached card: skip the read, but still
+  // write, so the fresh answer replaces the stale entry.
+  const hit = refresh ? null : await cacheGet(cacheKey);
   if (hit) return { ...hit, cached: true };
 
   const userText =
@@ -617,6 +649,7 @@ async function handleSummarize({ videoId, title, author, thumbnailUrl, transcrip
       learnings: [],
       comparison: null,
       ranking: null,
+      list: null,
       recipe: null,
       disclosure: null,
       titleTranslated: null,
@@ -626,14 +659,7 @@ async function handleSummarize({ videoId, title, author, thumbnailUrl, transcrip
     const followups = (Array.isArray(parsed.followups) ? parsed.followups : [])
       .filter((f) => f?.question && f?.answer)
       .slice(0, 5);
-    let comparison = sanitizeComparison(parsed.comparison);
-    let ranking = sanitizeRanking(parsed.ranking);
-    // Mutually exclusive; if the model filled both anyway, a bigger
-    // best-to-worst list beats a head-to-head, and vice versa.
-    if (comparison && ranking) {
-      if (ranking.items.length >= 4) comparison = null;
-      else ranking = null;
-    }
+    const { comparison, ranking, list, recipe } = readExtra(parsed);
     result = {
       ok: true,
       question: parsed.question || null,
@@ -646,7 +672,8 @@ async function handleSummarize({ videoId, title, author, thumbnailUrl, transcrip
         .slice(0, 8),
       comparison,
       ranking,
-      recipe: sanitizeRecipe(parsed.recipe),
+      list,
+      recipe,
       disclosure: sanitizeDisclosure(parsed.disclosure),
       titleTranslated: parsed.title ? String(parsed.title) : null,
       usage,
@@ -654,6 +681,45 @@ async function handleSummarize({ videoId, title, author, thumbnailUrl, transcrip
   }
   await cachePut(cacheKey, result);
   return result;
+}
+
+// The schema returns one tagged payload; the card renders four separate fields,
+// so unpack it. Providers without schema enforcement sometimes drop the tag or
+// emit the older flat shape, so fall back to trying each sanitizer in turn —
+// most specific first, since a ranking's items also satisfy a list's shape.
+function readExtra(parsed) {
+  const byKind = {
+    comparison: sanitizeComparison,
+    ranking: sanitizeRanking,
+    list: sanitizeList,
+    recipe: sanitizeRecipe,
+  };
+  const out = { comparison: null, ranking: null, list: null, recipe: null };
+  const extra = parsed.extra;
+
+  if (extra && typeof extra === "object") {
+    const tagged = byKind[extra.kind]?.(extra);
+    if (tagged) {
+      out[extra.kind] = tagged;
+      return out;
+    }
+    for (const [kind, sanitize] of Object.entries(byKind)) {
+      const value = sanitize(extra);
+      if (value) {
+        out[kind] = value;
+        return out;
+      }
+    }
+  }
+  // Flat shape: a provider that ignored `extra` and answered the old way.
+  for (const [kind, sanitize] of Object.entries(byKind)) {
+    const value = sanitize(parsed[kind]);
+    if (value) {
+      out[kind] = value;
+      return out;
+    }
+  }
+  return out;
 }
 
 function sanitizeRecipe(r) {
@@ -728,4 +794,24 @@ function sanitizeRanking(r) {
     }));
   if (items.length < 3) return null;
   return { items, note: r.note ? String(r.note) : "" };
+}
+
+// A listicle needs at least 3 items to be a list rather than prose; capped at
+// 30 so a "100 facts" video doesn't blow the card up. Items may legitimately
+// carry no comment, so notes can be empty — the name alone still counts.
+function sanitizeList(l) {
+  if (!l || !Array.isArray(l.items)) return null;
+  const items = l.items
+    .filter((i) => i?.name)
+    .slice(0, 30)
+    .map((i) => ({
+      name: String(i.name),
+      notes: (Array.isArray(i.notes) ? i.notes : []).filter(Boolean).map(String).slice(0, 3),
+    }));
+  if (items.length < 3) return null;
+  return {
+    heading: l.heading ? String(l.heading) : "",
+    stated: Number.isInteger(l.stated) && l.stated > 0 ? l.stated : null,
+    items,
+  };
 }
